@@ -50,7 +50,8 @@ def getIntervals(onlist):
     return intervals
 
 #translate tiles by dx,dy ingame
-def makeTilesFromFrames(frames,dx=0,dy=0):
+#frameLen is number of ingame frames each "frame" lasts
+def makeTilesFromFrames(frames,dx=0,dy=0,frameLen=1):
     w = len(frames[0][0])
     h = len(frames[0])
     l = len(frames)
@@ -67,12 +68,12 @@ def makeTilesFromFrames(frames,dx=0,dy=0):
                 new.Height = 25
                 if block[2]:
                     new.TileID = "r"
-                    new.TileName = f"POP{block[0]},{block[1]},{block[2]}"
+                    new.TileName = f"POP{block[0]*frameLen},{block[1]*frameLen},{block[2]*frameLen}"
                 else:
                     new.TileID = "b"
                 tileList.append(new)
     return tileList
 
 #encodeLevel method from @klementc
-def makeLevelFromFrames(frames):
-    return encodeLevel("Name",makeTilesFromFrames(frames),0)
+def makeLevelFromFrames(frames,dx=0,dy=0,frameLen=1):
+    return encodeLevel("Name",makeTilesFromFrames(frames,dx,dy,frameLen),0)
