@@ -2,14 +2,14 @@ from PIL import Image, ImageOps
 
 #Tile class from @klementc
 class Tile():
-  def __init__(self):
-    self.Tag = ""
-    self.TileID = ""
-    self.TileName = ""
-    self.Pos = []
-    self.Rotation = 0
-    self.Width = 0
-    self.Height = 0
+    def __init__(self):
+        self.Tag = ""
+        self.TileID = ""
+        self.TileName = ""
+        self.Pos = []
+        self.Rotation = 0
+        self.Width = 0
+        self.Height = 0
 
 #load gif with
 #gif = Image.open("name.gif")
