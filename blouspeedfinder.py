@@ -1,0 +1,30 @@
+#left only works at x = 1025
+#right works at x = 0, 425-500, 850-1000, 6575-8175
+
+from math import trunc, floor
+
+def rnd(x):
+    return trunc(x*20)/20
+
+def bloublou(x,v,wall,left=False):
+    if left: return floor((x+v-13.8/2+1)/25)*25>=wall and rnd(x+v)<wall+5.89
+    return floor((x+v+13.8/2-1)/25)*25<wall and rnd(x+v)>wall-5.91
+
+def testblou(wall):
+    speeds = []
+    for v in range(-470,471):
+        w = wall*20+(118 if v<0 else -118)
+        nx = (w-v)/20
+        if bloublou(nx,v/20,wall,v<0): speeds.append(v/20)
+    return speeds
+
+def DispBlouSpeeds(wallX):
+    print(f'{wallX}:')
+    speeds = testblou(wallX)
+    i = 0
+    while i<len(speeds):
+        print(*speeds[i:i+8],sep=', ')
+        i += 8
+
+DispBlouSpeeds(1000)
+DispBlouSpeeds(1025)
