@@ -131,7 +131,7 @@ def makeTilesFromFrames(frames,dx=0,dy=0,frameLen=1):
             for t in range(l):
                 if frames[t][y][x]: onlist[t] = 1
             for block in getIntervals(onlist):
-                new = tile.Tile()
+                new = Tile()
                 new.Pos = [x*25+dx,y*25+dy]
                 new.Width = 25
                 new.Height = 25
