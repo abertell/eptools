@@ -1,6 +1,7 @@
 from PIL import Image, ImageOps
+import zlib, io, os, struct
 
-#Tile class from @klementc
+#encodeLevel method and Tile class from @klementc
 class Tile():
     def __init__(self):
         self.Tag = ""
@@ -10,6 +11,74 @@ class Tile():
         self.Rotation = 0
         self.Width = 0
         self.Height = 0
+
+def encodeLevel(name, tileList, cfg):
+    lvlCode = io.BytesIO()
+    code = "{}~#-".format(name)
+    ms = [[[1,0],[0,1]]]
+    mis = []
+    mxs = []
+    for t in tileList:
+        m = ms[0]
+        xScale = 1
+        yScale = 1
+        rot = -(t.Rotation*math.pi)/180
+        sX = float(t.Width)/float((tileDesc.BinTiles[t.TileID].Size[0]))
+        sY = float(t.Height)/float((tileDesc.BinTiles[t.TileID].Size[1]))
+        m = [[1,0],[0,1]]
+        m[0][0]=((math.cos(rot))*sX)
+        m[0][1]=((-1*math.sin(rot)))
+        m[1][0]=(math.sin(rot))
+        m[1][1]=((math.cos(rot))*sY)
+        try:
+            idx = ms.index(m)
+            mis.append(idx)
+        except ValueError:
+            idx = len(ms)
+            ms.append(m)
+            mis.append(idx)
+    lvlCode.write(int.to_bytes(0x564C5045, 4, byteorder='little'))
+    lvlCode.write(int.to_bytes(1, 1, byteorder='little'))
+    rd = os.urandom(2)
+    lvlCode.write(rd)
+    lvlCode.write(int.to_bytes(cfg, 1, byteorder="little"))
+    lvlCode.write(int.to_bytes(len(ms)-1, 4, byteorder='little'))
+    for lm in ms[1:]:
+        lvlCode.write(struct.pack('f', lm[0][0]))
+        lvlCode.write(struct.pack('f', lm[0][1]))
+        lvlCode.write(struct.pack('f', lm[1][0]))
+        lvlCode.write(struct.pack('f', lm[1][1]))
+    lvlCode.write(int.to_bytes(len(tileList), 4, byteorder="little"))
+    x = 0
+    for tile in tileList:
+        id = tileDesc.TileDescBin[tile.TileID]
+        name = tile.TileName
+        xScale = 1
+        yScale = 1
+        trX =(tile.Pos[0])
+        trY =(tile.Pos[1])
+        td = int.to_bytes(tileDesc.TileDescBin[tile.TileID], 1, byteorder='little')
+        tmod = int.to_bytes((0x80 if mis[x] != 0 else 0), 1, byteorder='little')
+        lvlCode.write(int.to_bytes((td[0] | tmod[0]), 1, byteorder="little"))
+        if (tileDesc.BinTiles[tile.TileID].HasTag):
+            tag = tile.Tag if tile.Tag else ""
+            lvlCode.write(int.to_bytes(len(tag), 1, byteorder='little'))
+            lvlCode.write(bytes(tag, 'utf-8'))
+        elif (tileDesc.BinTiles[tile.TileID].HasName):
+            lvlCode.write(int.to_bytes(len(tile.TileName), 1, byteorder='little'))
+            lvlCode.write(bytes(tile.TileName, 'utf-8'))
+        if (mis[x] != 0):
+            lvlCode.write(int.to_bytes(mis[x], 4, byteorder='little'))
+        lvlCode.write(struct.pack('f', trX))
+        lvlCode.write(struct.pack('f', trY))
+        x+=1
+    lvlCode.seek(0)
+    buffer = lvlCode.read()
+    compressed = zlib.compress(buffer)[2:]
+    based = base64.b64encode(compressed)
+    code += based.decode('utf-8') + "~"
+    return code
+
 
 #load gif with
 #gif = Image.open("name.gif")
@@ -74,6 +143,5 @@ def makeTilesFromFrames(frames,dx=0,dy=0,frameLen=1):
                 tileList.append(new)
     return tileList
 
-#encodeLevel method from @klementc
 def makeLevelFromFrames(frames,dx=0,dy=0,frameLen=1):
     return encodeLevel("Name",makeTilesFromFrames(frames,dx,dy,frameLen),0)
