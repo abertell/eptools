@@ -1,5 +1,5 @@
 from PIL import Image, ImageOps
-import zlib, io, os, struct
+import zlib, io, os, struct, base64
 
 #encodeLevel method and Tile class from @klementc
 class Tile():
