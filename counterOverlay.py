@@ -1,4 +1,5 @@
 #SETUP
+
 from tkinter import *
 from tkinter import font
 from pynput import keyboard as kb
@@ -9,6 +10,7 @@ DEFAULT_FONT = font.nametofont("TkDefaultFont")
 
 
 #CUSTOM PARAMETERS
+
 COUNT_KEY = 'c'
 RESET_KEY = 'esc'
 HEADER_TEXT = ''
@@ -25,6 +27,7 @@ FLOW_FONT = ("Arial", 11, "bold italic")
 
 
 #CODE
+
 num_map = [41,33,64,35,36,37,94,38,42,40]
 
 def interpret_key(key):
@@ -47,16 +50,16 @@ def count():
     counter += 1
     label2.configure(text=f"{counter}")
 
+def reset():
+    global counter
+    counter = 0
+    label2.configure(text="0")
+
 def show(target,disp):
     target.configure(text=disp)
 
 def hide(target):
     target.configure(text='')
-
-def reset():
-    global counter
-    counter = 0
-    label2.configure(text="0")
 
 counter = 0
 label1 = Label(root, text=COUNTER_LABEL, bg='black', fg='white')
@@ -95,7 +98,7 @@ countkeys = interpret_key(COUNT_KEY)
 resetkeys = interpret_key(RESET_KEY)
 
 def on_press(key):
-    if key in countkeys: press()
+    if key in countkeys: count()
     if key in resetkeys: reset()
     if key in upkeys: show(keyup, UP_SYMBOL)
     if key in leftkeys: show(keyleft, LEFT_SYMBOL)
