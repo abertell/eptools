@@ -4,7 +4,7 @@ from tkinter import *
 from tkinter import font
 from pynput import keyboard as kb
 root = Tk()
-root.title("Random stuff")
+root.title("Key Overlay + Counter")
 root.configure(bg='black')
 DEFAULT_FONT = font.nametofont("TkDefaultFont")
 
