@@ -9,9 +9,10 @@ DEFAULT_FONT = font.nametofont("TkDefaultFont")
 
 
 #CUSTOM PARAMETERS
-DEATH_KEY = 'c'
+COUNT_KEY = 'c'
 RESET_KEY = 'esc'
 HEADER_TEXT = ''
+COUNTER_LABEL = 'Deaths:'
 
 UP_SYMBOL = '\u2b9d'
 LEFT_SYMBOL = '\u2b9c'
@@ -41,10 +42,10 @@ def interpret_key(key):
             keylist.append(kb.KeyCode.from_char(chr(alt)))
     return keylist
 
-def press():
-    global count
-    count += 1
-    label2.configure(text=f"{count}")
+def count():
+    global counter
+    counter += 1
+    label2.configure(text=f"{counter}")
 
 def show(target,disp):
     target.configure(text=disp)
@@ -53,12 +54,12 @@ def hide(target):
     target.configure(text='')
 
 def reset():
-    global count
-    count = 0
-    label2.configure(text=f"{count}")
+    global counter
+    counter = 0
+    label2.configure(text="0")
 
-count = 0
-label1 = Label(root, text="Deaths:", bg='black', fg='white')
+counter = 0
+label1 = Label(root, text=COUNTER_LABEL, bg='black', fg='white')
 label1.grid(column=0, row=2)
 label2 = Label(root, text="0", bg='black', fg='white')
 label2.grid(column=1, row=2)
@@ -90,11 +91,11 @@ keyflow = Label(root, bg='black', fg='white', font=FLOW_FONT)
 keyflow.grid(column=2, row=2)
 flowkeys = [kb.Key.space, kb.Key.shift, kb.Key.shift_r]
 
-deathkeys = interpret_key(DEATH_KEY)
+countkeys = interpret_key(COUNT_KEY)
 resetkeys = interpret_key(RESET_KEY)
 
 def on_press(key):
-    if key in deathkeys: press()
+    if key in countkeys: press()
     if key in resetkeys: reset()
     if key in upkeys: show(keyup, UP_SYMBOL)
     if key in leftkeys: show(keyleft, LEFT_SYMBOL)
