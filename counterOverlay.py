@@ -4,24 +4,24 @@ from tkinter import *
 from tkinter import font
 from pynput import keyboard as kb
 root = Tk()
-root.title("Key Overlay + Counter")
+root.title("Random stuff")
 root.configure(bg='black')
 DEFAULT_FONT = font.nametofont("TkDefaultFont")
 
 
 #CUSTOM PARAMETERS
 
-COUNT_KEY = 'c'
-RESET_KEY = 'esc'
-HEADER_TEXT = ''
-COUNTER_LABEL = 'Deaths:'
+COUNTERS = 2
+COUNTER_LABELS = ['Jumps:', 'Resets:']
+COUNT_KEYS = ['up', 'esc']
+RESET_KEYS = ['backspace', 'backspace']
 
+HEADER_TEXT = ''
 UP_SYMBOL = '\u2b9d'
 LEFT_SYMBOL = '\u2b9c'
 DOWN_SYMBOL = '\u2b9f'
 RIGHT_SYMBOL = '\u2b9e'
 FLOW_SYMBOL = 'flow'
-
 ARROW_FONT = DEFAULT_FONT
 FLOW_FONT = ("Arial", 11, "bold italic")
 
@@ -32,8 +32,11 @@ num_map = [41,33,64,35,36,37,94,38,42,40]
 
 def interpret_key(key):
     keylist = []
-    if len(key)>1: keylist.append(eval(f"kb.Key.{key}"))
-    else:
+    if len(key)>1:
+        if key in ['up','left','down','right','flow']:
+            keylist = gamekeys[key]
+        else: keylist.append(eval(f"kb.Key.{key}"))
+    elif len(key)==1:
         ind = ord(key)
         alt = 0
         if 65<=ind<=90: alt=ind+32
@@ -45,15 +48,23 @@ def interpret_key(key):
             keylist.append(kb.KeyCode.from_char(chr(alt)))
     return keylist
 
-def count():
-    global counter
-    counter += 1
-    label2.configure(text=f"{counter}")
+gamekeys = {
+    'up': interpret_key('w')+[kb.Key.up],
+    'left': interpret_key('a')+[kb.Key.left],
+    'down': interpret_key('s')+[kb.Key.down],
+    'right': interpret_key('d')+[kb.Key.right],
+    'flow': [kb.Key.space, kb.Key.shift, kb.Key.shift_r]
+}
 
-def reset():
-    global counter
-    counter = 0
-    label2.configure(text="0")
+def count(i):
+    global counters
+    counters[i] += 1
+    labels2[i].configure(text=f"{counters[i]}")
+
+def reset(i):
+    global counters
+    counters[i] = 0
+    labels2[i].configure(text="0")
 
 def show(target,disp):
     target.configure(text=disp)
@@ -61,11 +72,16 @@ def show(target,disp):
 def hide(target):
     target.configure(text='')
 
-counter = 0
-label1 = Label(root, text=COUNTER_LABEL, bg='black', fg='white')
-label1.grid(column=0, row=2)
-label2 = Label(root, text="0", bg='black', fg='white')
-label2.grid(column=1, row=2)
+counters = [0]*COUNTERS
+labels1, labels2, countkeys, resetkeys = [],[],[],[]
+
+for i in range(COUNTERS):
+    labels1.append(Label(root, text=COUNTER_LABELS[i], bg='black', fg='white'))
+    labels1[-1].grid(column=0, row=i+1)
+    labels2.append(Label(root, text="0", bg='black', fg='white'))
+    labels2[-1].grid(column=1, row=i+1)
+    countkeys.append(interpret_key(COUNT_KEYS[i]))
+    resetkeys.append(interpret_key(RESET_KEYS[i]))
 
 spacing = [1,6,10,4,4,4]
 space = []
@@ -76,42 +92,31 @@ space[0].configure(text=HEADER_TEXT)
 
 keyup = Label(root, bg='black', fg='white', font=ARROW_FONT)
 keyup.grid(column=4, row=1)
-upkeys = interpret_key('w')+[kb.Key.up]
-
 keyleft = Label(root, bg='black', fg='white', font=ARROW_FONT)
 keyleft.grid(column=3, row=2)
-leftkeys = interpret_key('a')+[kb.Key.left]
-
 keydown = Label(root, bg='black', fg='white', font=ARROW_FONT)
 keydown.grid(column=4, row=2)
-downkeys = interpret_key('s')+[kb.Key.down]
-
 keyright = Label(root, bg='black', fg='white', font=ARROW_FONT)
 keyright.grid(column=5, row=2)
-rightkeys = interpret_key('d')+[kb.Key.right]
-
 keyflow = Label(root, bg='black', fg='white', font=FLOW_FONT)
 keyflow.grid(column=2, row=2)
-flowkeys = [kb.Key.space, kb.Key.shift, kb.Key.shift_r]
-
-countkeys = interpret_key(COUNT_KEY)
-resetkeys = interpret_key(RESET_KEY)
 
 def on_press(key):
-    if key in countkeys: count()
-    if key in resetkeys: reset()
-    if key in upkeys: show(keyup, UP_SYMBOL)
-    if key in leftkeys: show(keyleft, LEFT_SYMBOL)
-    if key in downkeys: show(keydown, DOWN_SYMBOL)
-    if key in rightkeys: show(keyright, RIGHT_SYMBOL)
-    if key in flowkeys: show(keyflow, FLOW_SYMBOL)
+    for i in range(COUNTERS):
+        if key in countkeys[i]: count(i)
+        if key in resetkeys[i]: reset(i)
+    if key in gamekeys['up']: show(keyup, UP_SYMBOL)
+    if key in gamekeys['left']: show(keyleft, LEFT_SYMBOL)
+    if key in gamekeys['down']: show(keydown, DOWN_SYMBOL)
+    if key in gamekeys['right']: show(keyright, RIGHT_SYMBOL)
+    if key in gamekeys['flow']: show(keyflow, FLOW_SYMBOL)
 
 def on_release(key):
-    if key in upkeys: hide(keyup)
-    if key in leftkeys: hide(keyleft)
-    if key in downkeys: hide(keydown)
-    if key in rightkeys: hide(keyright)
-    if key in flowkeys: hide(keyflow)
+    if key in gamekeys['up']: hide(keyup)
+    if key in gamekeys['left']: hide(keyleft)
+    if key in gamekeys['down']: hide(keydown)
+    if key in gamekeys['right']: hide(keyright)
+    if key in gamekeys['flow']: hide(keyflow)
 
 listener = kb.Listener(on_press=on_press, on_release=on_release)
 listener.start()
