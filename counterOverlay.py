@@ -102,9 +102,6 @@ keyflow = Label(root, bg='black', fg='white', font=FLOW_FONT)
 keyflow.grid(column=2, row=2)
 
 def on_press(key):
-    for i in range(COUNTERS):
-        if key in countkeys[i]: count(i)
-        if key in resetkeys[i]: reset(i)
     if key in gamekeys['up']: show(keyup, UP_SYMBOL)
     if key in gamekeys['left']: show(keyleft, LEFT_SYMBOL)
     if key in gamekeys['down']: show(keydown, DOWN_SYMBOL)
@@ -112,6 +109,9 @@ def on_press(key):
     if key in gamekeys['flow']: show(keyflow, FLOW_SYMBOL)
 
 def on_release(key):
+    for i in range(COUNTERS):
+        if key in countkeys[i]: count(i)
+        if key in resetkeys[i]: reset(i)
     if key in gamekeys['up']: hide(keyup)
     if key in gamekeys['left']: hide(keyleft)
     if key in gamekeys['down']: hide(keydown)
