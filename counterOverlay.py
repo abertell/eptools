@@ -14,7 +14,7 @@ DEFAULT_FONT = font.nametofont("TkDefaultFont")
 COUNTERS = 2
 COUNTER_LABELS = ['Jumps:', 'Resets:']
 COUNT_KEYS = ['up', 'esc']
-RESET_KEYS = ['backspace', 'backspace']
+RESET_KEYS = ['','']
 
 HEADER_TEXT = ''
 UP_SYMBOL = '\u2b9d'
@@ -27,6 +27,8 @@ FLOW_FONT = ("Arial", 11, "bold italic")
 
 
 #CODE
+
+counters = [0]*COUNTERS #initial values
 
 num_map = [41,33,64,35,36,37,94,38,42,40]
 
@@ -72,7 +74,6 @@ def show(target,disp):
 def hide(target):
     target.configure(text='')
 
-counters = [0]*COUNTERS
 labels1, labels2, countkeys, resetkeys = [],[],[],[]
 
 for i in range(COUNTERS):
