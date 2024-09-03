@@ -69,11 +69,7 @@ hid.Width = 25
 hid.Height = 25
 hid.TileID = ' '
 other.append(hid)
-waypoints = [
-    (*start.Pos,0),
-    *waypoints,
-    (*fin.Pos,finTime)
-]
+waypoints = [(*start.Pos,0),*waypoints,(*fin.Pos,finTime)]
 first = {}
 last = {}
 for i in range(len(waypoints)-1):
