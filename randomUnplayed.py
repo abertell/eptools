@@ -2,7 +2,7 @@
 # https://github.com/klementc/exitpath-maker-archive/blob/master/pbsArchive.csv
 # https://github.com/klementc/exitpath-maker-archive/blob/master/levelsArchive.csv
 
-user = "Nairod"
+users = ["Nairod"]
 
 from random import choice
 from collections import defaultdict
@@ -35,7 +35,7 @@ for s in L[1:]:
     date,tas = line[-2:]
     comment = ','.join(line[6:-2])
     levels[lvl].append(([*map(int,(t1,t2,t3))],usr,comment,int(tas),bool(vid)))
-    if usr == user:
+    if usr in users:
         has_user.add(lvl)
 
 levels = [(i,levels[i]) for i in levels if i not in has_user]
