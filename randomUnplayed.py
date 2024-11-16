@@ -2,10 +2,11 @@
 # https://github.com/klementc/exitpath-maker-archive/blob/master/pbsArchive.csv
 # https://github.com/klementc/exitpath-maker-archive/blob/master/levelsArchive.csv
 
+user = "Nairod"
+
 from random import choice
 from collections import defaultdict
 
-user = "Nairod"
 file_path = "pbsArchive.csv"
 data_path = "levelsArchive.csv"
 
