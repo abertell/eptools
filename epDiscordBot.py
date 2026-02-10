@@ -1,3 +1,5 @@
+# v1.0.1
+
 import time
 import json
 import requests
@@ -10,9 +12,9 @@ from discord.ext import tasks
 TOKEN = '<discord bot token>'
 localpath = '<path for saving level previews>'
 
-url = 'http://exitpath-maker.net'
+delay = 5 # minutes
 
-delay = 5 #minutes
+url = 'http://exitpath-maker.net'
 
 TEAL = discord.Color.teal()
 GOLD = discord.Color.gold()
@@ -114,6 +116,9 @@ def create_image(src,fix=True):
 def link_name(name):
     return f'[{name}]({url}/author/{name})'
 
+def link_vid(time,vid):
+    return f'[{time}]({vid})' if vid else time
+
 def skim(s):
     a = []
     read = True
@@ -130,15 +135,18 @@ def get_lv(level):
         print('get_lb',r.status_code)
         return
     name = r.text.partition(' - EPLevels')[0].partition('<title>')[2]
-    info = r.text.partition('levelPropsTable')[2].partition('</section>')[0].split('<strong>')[1:]
+    info = r.text.partition('levelPropsTable')[2].partition('</section>')[0]
+    info = info.split('<strong>')[1:]
     info = [skim(i) for i in info]
     info = dict(i for i in info if len(i)==2)
     info['Name'] = name
     chunks = r.text.partition('Leaderboard')[2].split('title')[1:-1]
     lb = []
     for i in chunks:
-        res = [j.partition('</td>')[0].strip() for j in i.split('<td>')[1:4]]
+        res = [j.partition('</td>')[0].strip() for j in i.split('<td>')[1:6]]
         res[1] = res[1].partition('">')[2].partition('</a>')[0]
+        res.pop(3)
+        res[3] = res[3].partition('">')[2].partition('</a>')[0]
         lb.append(res)
     return info,lb
 
@@ -168,19 +176,22 @@ def write_time(entry):
     e = discord.Embed(**kw)
     user,runtime = data['By'],data['Chrono']
     e.add_field(name='Player',value=link_name(user))
-    e.add_field(name='Time',value=runtime)
+    writetime = runtime
+    if 'Video' in data: writetime = link_vid(runtime,data['Video'])
+    e.add_field(name='Time',value=writetime)
     if got_lv:
         n = len(lb)
         tas = sum(i[0]=='TAS' for i in lb)
         if istas: e.add_field(name='Rank',value=f'-/{n-tas}')
         else:
             for i in range(tas,n):
-                if lb[i] == [str(i-tas+1),user,runtime]:
+                if lb[i][1:3] == [user,runtime]:
                     e.add_field(name='Rank',value=f'{i-tas+1}/{n-tas}')
                     break
-        e.add_field(name='WR',value=f'{lb[0][2]} by {link_name(lb[0][1])}',inline=False)
-    if 'Video' in data:
-        e.add_field(name='Video',value=f'[link]({data["Video"]})',inline=False)
+        e.add_field(
+            name='WR',
+            value=f'{link_vid(*lb[0][2:4])} by {link_name(lb[0][1])}',
+            inline=False)
     if data['Comment'] != 'No comment':
         e.add_field(name='Comment',value=data['Comment'],inline=False)
     return e,create_image(f'{url}/static/lvls/{lv}.svg')
@@ -204,10 +215,11 @@ def write_level_info(level):
     e = discord.Embed(title=info['Name'],url=f'{url}/{level}',color=TEAL)
     for field in info:
         if field == 'Name': continue
-        if field == 'Description' and info[field] == 'No description': continue
+        if field == 'Description' and info[field] == 'No description':
+            continue
         e.add_field(name=field,value=info[field],inline=False)
-    e.add_field(name='Users',value='\n'.join(i[1] for i in lb))
-    e.add_field(name='Times',value='\n'.join(i[2] for i in lb))
+    e.add_field(name='Users',value='\n'.join(link_name(i[1]) for i in lb))
+    e.add_field(name='Times',value='\n'.join(link_vid(*i[2:4]) for i in lb))
     return e
 
 @tasks.loop(minutes=delay)
@@ -228,8 +240,8 @@ async def check_feed():
             t = entry['published']
             if t not in feed or feed[t]!=json.dumps(entry,sort_keys=True):
                 new.append((time.mktime(entry['published_parsed']),hash(entry),entry))
-        if len(new)>99: quit() # should probably never happen
         for t,_,entry in sorted(new):
+            print(entry['title'])
             feed[entry['published']] = json.dumps(entry,sort_keys=True)
             kind = entry['title'].partition(':')[0]
             islvl = kind == 'New level'
