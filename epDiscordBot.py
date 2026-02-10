@@ -1,3 +1,4 @@
+import time
 import json
 import requests
 from wand.image import Image
@@ -11,6 +12,8 @@ localpath = '<path for saving level previews>'
 
 url = 'http://exitpath-maker.net'
 
+delay = 5 #minutes
+
 TEAL = discord.Color.teal()
 GOLD = discord.Color.gold()
 
@@ -19,21 +22,55 @@ intents.message_content = True
 
 client = discord.Client(intents=intents)
 
-channels = []
+channels = {}
+feed = {}
 
 @client.event
 async def on_ready():
+    print('starting')
     for guild in client.guilds:
         for channel in guild.text_channels:
-            if channel.name == 'ep-bot':
-                channels.append(channel)
-    print('servers:',[i.guild.name for i in channels])
+            if channel.name == 'ep-bot': channels[guild.name] = channel
+    print('server list updated:',', '.join(channels))
     check_feed.start()
+
+def check_guild(guild):
+    if guild.name in channels: del channels[guild.name]
+    for channel in guild.text_channels:
+        if channel.name == 'ep-bot': channels[guild.name] = channel
+
+@client.event
+async def on_guild_join(guild):
+    check_guild(guild)
+    print('joined',guild.name)
+
+@client.event
+async def on_guild_update(before,after):
+    if before.name in channels: del channels[before.name]
+    check_guild(after)
+    print('updated',before.name)
+
+@client.event
+async def on_guild_remove(guild):
+    if guild.name in channels: del channels[guild.name]
+    print('left',guild.name)
+
+@client.event
+async def on_guild_channel_delete(channel):
+    check_guild(channel.guild)
+
+@client.event
+async def on_guild_channel_create(channel):
+    check_guild(channel.guild)
+
+@client.event
+async def on_guild_channel_update(before,after):
+    check_guild(after.guild)
 
 @client.event
 async def on_message(message):
     if message.author == client.user: return
-    if message.channel not in channels: return
+    if channels.get(message.guild.name) != message.channel: return
     s = message.content
     if s[:4] == '>ep ':
         arg = s[4:]
@@ -173,24 +210,27 @@ def write_level_info(level):
     e.add_field(name='Times',value='\n'.join(i[2] for i in lb))
     return e
 
-last_request = None
-
-@tasks.loop(minutes=5)
+@tasks.loop(minutes=delay)
 async def check_feed():
-    global last_request
     print('running loop')
     r = parse(f'{url}/rss.xml')
     if 'entries' not in r:
         print('rss request failed')
         return
     r = r['entries']
-    if not last_request is None:
+    # extremely inefficient but the data format is so bad idk another way
+    if not feed:
+        for entry in r:
+            feed[entry['published']] = json.dumps(entry,sort_keys=True)
+    else:
         new = []
-        i = 0
-        while json.dumps(r[i],sort_keys=True) != last_request:
-            new.append(r[i])
-            i += 1
-        for entry in new[::-1]:
+        for entry in r:
+            t = entry['published']
+            if t not in feed or feed[t]!=json.dumps(entry,sort_keys=True):
+                new.append((time.mktime(entry['published_parsed']),hash(entry),entry))
+        if len(new)>99: quit() # should probably never happen
+        for t,_,entry in sorted(new):
+            feed[entry['published']] = json.dumps(entry,sort_keys=True)
             kind = entry['title'].partition(':')[0]
             islvl = kind == 'New level'
             if islvl: e,res = write_level(entry)
@@ -202,8 +242,8 @@ async def check_feed():
                 if islvl: e.set_image(url=src)
                 else: e.set_thumbnail(url=src)
                 kw['file'] = file
-            for channel in channels:
-                await channel.send(**kw)
+            for i in channels:
+                await channels[i].send(**kw)
     last_request = json.dumps(r[0],sort_keys=True)
     print('up to date')
 
