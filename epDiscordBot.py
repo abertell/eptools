@@ -1,4 +1,4 @@
-# v1.1.2
+# v1.1.3
 
 import time
 import json
@@ -269,9 +269,9 @@ def write_time(entry):
                     break
         e.add_field(
             name='WR',
-            value=f'{link_vid(*lb[0][2:4])} by {link_name(lb[0][1])}',
+            value=f'{link_vid(*lb[tas][2:4])} by {link_name(lb[tas][1])}',
             inline=False)
-    if data['Comment'] != 'No comment':
+    if data['Comment'] not in ('','No comment'):
         e.add_field(name='Comment',value=data['Comment'],inline=False)
     return e,create_image(f'{url}/static/lvls/{lv}.svg')
 
