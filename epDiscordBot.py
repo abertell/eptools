@@ -1,4 +1,4 @@
-# v1.0.1
+# v1.0.2
 
 import time
 import json
@@ -110,8 +110,7 @@ def create_image(src,fix=True):
     png = img.make_blob("png")
     with open(localpath,'wb') as f: f.write(png)
     name = src.split('/')[-1].replace('svg','png')
-    file = discord.File(localpath,filename=name)
-    return name,file
+    return name
 
 def link_name(name):
     return f'[{name}]({url}/author/{name})'
@@ -224,7 +223,7 @@ def write_level_info(level):
 
 @tasks.loop(minutes=delay)
 async def check_feed():
-    print('running loop')
+    print('running loop at',time.ctime())
     r = parse(f'{url}/rss.xml')
     if 'entries' not in r:
         print('rss request failed')
@@ -245,17 +244,18 @@ async def check_feed():
             feed[entry['published']] = json.dumps(entry,sort_keys=True)
             kind = entry['title'].partition(':')[0]
             islvl = kind == 'New level'
-            if islvl: e,res = write_level(entry)
-            else: e,res = write_time(entry)
-            kw = {'embed':e}
-            if res:
-                name,file = res
-                src = f'attachment://{name}'
-                if islvl: e.set_image(url=src)
-                else: e.set_thumbnail(url=src)
-                kw['file'] = file
+            if islvl: e,name = write_level(entry)
+            else: e,name = write_time(entry)
+            if not name:
+                for i in channels: await channels[i].send(embed=e)
+                continue
+            src = f'attachment://{name}'
+            if islvl: e.set_image(url=src)
+            else: e.set_thumbnail(url=src)
             for i in channels:
-                await channels[i].send(**kw)
+                file = discord.File(localpath,filename=name)
+                await channels[i].send(file=file,embed=e)
+                
     last_request = json.dumps(r[0],sort_keys=True)
     print('up to date')
 
