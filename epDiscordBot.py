@@ -1,4 +1,4 @@
-# v1.1.1
+# v1.1.2
 
 import time
 import json
@@ -144,7 +144,7 @@ def get_lv(level):
     info = info.split('<strong>')[1:]
     info = [[i.strip() for i in skim(i).split(':')] for i in info]
     info = dict(i for i in info if len(i)==2)
-    info['Name'] = name
+    info['Name'] = name.replace('&#39;',"'")
     chunks = r.text.partition('Leaderboard')[2].split('title')[1:-1]
     lb = []
     for i in chunks:
