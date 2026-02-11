@@ -1,4 +1,4 @@
-# v1.1.0
+# v1.1.1
 
 import time
 import json
@@ -85,13 +85,12 @@ async def on_message(message):
         if not e:
             await message.channel.send(f'Level {arg} not found')
             return
-        res = create_image(f'{url}/static/lvls/{arg}.svg')
+        name = create_image(f'{url}/static/lvls/{arg}.svg')
         kw = {'embed':e}
-        if res:
-            name,file = res
+        if name:
             src = f'attachment://{name}'
             e.set_image(url=src)
-            kw['file'] = file
+            kw['file'] = discord.File(localpath,filename=name)
         await message.channel.send(**kw)
     elif s[:7] == '>stats ':
         arg = s[7:]
@@ -149,7 +148,6 @@ def get_lv(level):
     chunks = r.text.partition('Leaderboard')[2].split('title')[1:-1]
     lb = []
     for i in chunks:
-        print(i)
         res = [j.partition('</td>')[0].strip() for j in i.split('<td>')[1:6]]
         res.pop(3)
         res[1],res[3] = skim(res[1]),skim(res[3])
