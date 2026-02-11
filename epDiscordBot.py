@@ -1,4 +1,4 @@
-# v1.0.2
+# v1.1.0
 
 import time
 import json
@@ -93,6 +93,14 @@ async def on_message(message):
             e.set_image(url=src)
             kw['file'] = file
         await message.channel.send(**kw)
+    elif s[:7] == '>stats ':
+        arg = s[7:]
+        print('received request for user',arg)
+        res = user_stats(arg)
+        if not res:
+            await message.channel.send(f'User {arg} not found')
+            return
+        await message.channel.send(embed=res)
 
 def fix_image(img):
     w,h = img.size
@@ -116,7 +124,7 @@ def link_name(name):
     return f'[{name}]({url}/author/{name})'
 
 def link_vid(time,vid):
-    return f'[{time}]({vid})' if vid else time
+    return time if vid in ('','No video') else f'[{time}]({vid})'
 
 def skim(s):
     a = []
@@ -125,8 +133,7 @@ def skim(s):
         if i=='<': read = False
         if read: a.append(i)
         if i=='>': read = True
-    b = ''.join(a).strip().split(':')
-    return [i.strip() for i in b]
+    return ''.join(a).strip()
 
 def get_lv(level):
     r = requests.get(f'{url}/{level}')
@@ -136,18 +143,93 @@ def get_lv(level):
     name = r.text.partition(' - EPLevels')[0].partition('<title>')[2]
     info = r.text.partition('levelPropsTable')[2].partition('</section>')[0]
     info = info.split('<strong>')[1:]
-    info = [skim(i) for i in info]
+    info = [[i.strip() for i in skim(i).split(':')] for i in info]
     info = dict(i for i in info if len(i)==2)
     info['Name'] = name
     chunks = r.text.partition('Leaderboard')[2].split('title')[1:-1]
     lb = []
     for i in chunks:
+        print(i)
         res = [j.partition('</td>')[0].strip() for j in i.split('<td>')[1:6]]
-        res[1] = res[1].partition('">')[2].partition('</a>')[0]
         res.pop(3)
-        res[3] = res[3].partition('">')[2].partition('</a>')[0]
+        res[1],res[3] = skim(res[1]),skim(res[3])
         lb.append(res)
     return info,lb
+
+def time_to_cents(time):
+    m,_,t = time.partition(':')
+    s,_,f = t.partition('.')
+    m,s,f = map(int,(m,s,f))
+    return 6000*m+100*s+f
+
+def cents_to_time(n):
+    return f'{n//360000}h {n%360000//6000}m {n%6000//100}.{n%100}s'
+
+def get_user(user):
+    data = []
+    r = requests.get(f'{url}/author/{user}/all')
+    if r.status_code!=200:
+        print('get_user',r.status_code)
+        return
+    for i in r.text.partition("timesTable")[2].split('title="')[1:-1]:
+        b = [j.partition('</td>')[0] for j in i.split('<td>')[1:]]
+        b[0] = b[0].partition('href="/')[2].partition('"')[0]
+        for j in range(1,len(b)): b[j] = skim(b[j])
+        b[1] = time_to_cents(b[1])
+        data.append(b)
+    return data
+
+def user_stats(user):
+    data = get_user(user)
+    if not data: return
+    r = requests.get(url)
+    if r.status_code!=200:
+        print('main page',r.status_code)
+        return
+    lvls = int(skim(r.text.partition(')')[0]).partition(': ')[2])
+    uniq = {}
+    tas = dup = 0
+    for a in data:
+        if a[-1] == 'TAS':
+            tas += 1
+            continue
+        if a[0] in uniq:
+            dup += 1
+            if a[1] > uniq[a[0]][0]: continue
+        uniq[a[0]] = a[1:]
+    runs = len(uniq)
+    tot = long = only = tr = comments = vids = 0
+    rank = [0]*3
+    for i in uniq:
+        t,c,v,r = uniq[i]
+        if c not in ('','No comment'): comments += 1
+        if v not in ('','No video'): vids += 1
+        tot += t
+        if t>360000: long += 1
+        r,n = map(int,r.split('/'))
+        if r<4: rank[r-1] += 1
+        tr += r
+        if n<2: only += 1
+    e = discord.Embed(
+        title=f'Player stats for {user}',
+        description=f'Levels beaten: {runs}/{lvls} ({runs/lvls*100:.2f}%)')
+    ranks = [
+        ':trophy: (only fin)',
+        ':first_place_medal:',
+        ':second_place_medal:',
+        ':third_place_medal:']
+    e.add_field(name='Rank',value='\n'.join(ranks))
+    e.add_field(name='#',value='\n'.join(map(str,[only]+rank)))
+    e.add_field(
+        name='Total playtime (only submitted runs)',
+        value=cents_to_time(tot),inline=False)
+    e.add_field(name='Average rank',value=f'{tr/runs:.2f}')
+    e.add_field(name='1hr+ runs',value=str(long))
+    e.add_field(name='Comments',value=str(comments))
+    e.add_field(name='Videos',value=str(vids))
+    e.add_field(name='TAS runs',value=str(tas))
+    e.add_field(name='Duplicate runs',value=str(dup))
+    return e
 
 def write_time(entry):
     data = entry['summary']
