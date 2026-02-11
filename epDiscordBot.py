@@ -1,4 +1,4 @@
-# v1.1.3
+# v1.1.4
 
 import time
 import json
@@ -224,6 +224,7 @@ def user_stats(user):
     e.add_field(name='Average rank',value=f'{tr/runs:.2f}')
     e.add_field(name='1hr+ runs',value=str(long))
     e.add_field(name='Comments',value=str(comments))
+    e.add_field(name='',value='',inline=False)
     e.add_field(name='Videos',value=str(vids))
     e.add_field(name='TAS runs',value=str(tas))
     e.add_field(name='Duplicate runs',value=str(dup))
@@ -267,12 +268,14 @@ def write_time(entry):
                 if lb[i][1:3] == [user,runtime]:
                     e.add_field(name='Rank',value=f'{i-tas+1}/{n-tas}')
                     break
-        e.add_field(
-            name='WR',
-            value=f'{link_vid(*lb[tas][2:4])} by {link_name(lb[tas][1])}',
-            inline=False)
-    if data['Comment'] not in ('','No comment'):
-        e.add_field(name='Comment',value=data['Comment'],inline=False)
+        if data['Comment'] not in ('','No comment'):
+            e.add_field(name='Comment',value=data['Comment'],inline=False)
+        else: e.add_field(name='',value='',inline=False)
+        e.add_field(name='Users',value='\n'.join(link_name(i[1]) for i in lb[tas:]))
+        e.add_field(name='Times',value='\n'.join(link_vid(*i[2:4]) for i in lb[tas:]))
+    else:
+        if data['Comment'] not in ('','No comment'):
+            e.add_field(name='Comment',value=data['Comment'],inline=False)
     return e,create_image(f'{url}/static/lvls/{lv}.svg')
 
 def write_level(entry):
@@ -297,8 +300,9 @@ def write_level_info(level):
         if field == 'Description' and info[field] == 'No description':
             continue
         e.add_field(name=field,value=info[field],inline=False)
-    e.add_field(name='Users',value='\n'.join(link_name(i[1]) for i in lb))
-    e.add_field(name='Times',value='\n'.join(link_vid(*i[2:4]) for i in lb))
+    tas = sum(i[0]=='TAS' for i in lb)
+    e.add_field(name='Users',value='\n'.join(link_name(i[1]) for i in lb[tas:]))
+    e.add_field(name='Times',value='\n'.join(link_vid(*i[2:4]) for i in lb[tas:]))
     return e
 
 @tasks.loop(minutes=delay)
@@ -335,7 +339,6 @@ async def check_feed():
             for i in channels:
                 file = discord.File(localpath,filename=name)
                 await channels[i].send(file=file,embed=e)
-                
     last_request = json.dumps(r[0],sort_keys=True)
     print('up to date')
 
