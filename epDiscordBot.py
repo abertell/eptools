@@ -1,4 +1,4 @@
-# v1.2.0
+# v1.2.1
 
 '''
 Current features:
@@ -17,12 +17,12 @@ import time
 import json
 import random
 import requests
-from wand.image import Image
 from feedparser import parse
+from wand.image import Image
+from wand.exceptions import CacheError
 
 import discord
 from discord.ext import tasks
-
 
 TOKEN = '<discord bot token>'
 localpath = '<path for saving level previews>'
@@ -240,16 +240,20 @@ def fix_image(img):
     return img
 
 def create_image(src,fix=True):
-    r = requests.get(src)
-    if r.status_code!=200:
-        print('create_thumbnail failed',r.status_code)
+    try: 
+        r = requests.get(src)
+        if r.status_code!=200:
+            print('create_image failed',r.status_code)
+            return
+        img = Image(blob=r.content)
+        if fix: img = fix_image(img)
+        png = img.make_blob("png")
+        with open(localpath,'wb') as f: f.write(png)
+        name = src.split('/')[-1].replace('svg','png')
+        return name
+    except CacheError:
+        print('image conversion failed')
         return
-    img = Image(blob=r.content)
-    if fix: img = fix_image(img)
-    png = img.make_blob("png")
-    with open(localpath,'wb') as f: f.write(png)
-    name = src.split('/')[-1].replace('svg','png')
-    return name
 
 def mini_entry(entry):
     keys = ('summary','title','link')
@@ -414,7 +418,6 @@ def write_time(entry):
         if istas: e.add_field(name='Rank',value=f'-/{n-tas}')
         else:
             for i in range(tas,n):
-                print(lb[i][1:3],[user,runtime])
                 if lb[i][1:3] == [user,runtime]:
                     e.add_field(name='Rank',value=f'{lb[i][0]}/{n-tas}')
                     break
@@ -487,6 +490,8 @@ async def check_feed():
             jmini = json.dumps(mini_entry(entry),sort_keys=True)
             t = entry['published']
             if t not in feed or feed[t] != jmini:
+                print('old:',feed[t])
+                print('new:',jmini)
                 new.append((time.mktime(entry['published_parsed']),hash(entry),entry))
         for t,_,entry in sorted(new):
             jmini = json.dumps(mini_entry(entry),sort_keys=True)
