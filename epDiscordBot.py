@@ -1,7 +1,21 @@
-# v1.1.5
+# v1.2.0
+
+'''
+Current features:
+- `>ep [Level ID]`: Level info + times
+- `>stats [Username]`: Player stats
+- `>roll (amount)`:  Roll random levels
+- `>new [user] (amount)`: Roll unbeaten levels for user
+- `>improve [user] (amount)`: Roll improvable (not WR) levels for user
+- `>snipe [user] (amount)`:  Roll snipe-able (WR) levels for user
+- New levels/times will also post automatically (checked every 5 minutes)
+
+(all `(amount)` fields are optional and must be between 1 and 10)
+'''
 
 import time
 import json
+import random
 import requests
 from wand.image import Image
 from feedparser import parse
@@ -9,8 +23,14 @@ from feedparser import parse
 import discord
 from discord.ext import tasks
 
+
 TOKEN = '<discord bot token>'
 localpath = '<path for saving level previews>'
+
+ALL_LEVELS = [] # pre-compute and paste for faster startup
+use_preload_intvs = False
+user_data_cache = {}
+max_requests = 10
 
 delay = 5 # minutes
 
@@ -29,7 +49,14 @@ feed = {}
 
 @client.event
 async def on_ready():
+    global ALL_LEVELS
     print('starting')
+    if ALL_LEVELS:
+        if use_preload_intvs:
+            gen = zip(ALL_LEVELS[::2],ALL_LEVELS[1::2])
+            ALL_LEVELS = sum(([*range(a,b+1)] for a,b in gen),[])
+    else: ALL_LEVELS = get_all_levels()
+    print('all',len(ALL_LEVELS),'level ids found')
     for guild in client.guilds:
         for channel in guild.text_channels:
             if channel.name == 'ep-bot': channels[guild.name] = channel
@@ -74,32 +101,137 @@ async def on_message(message):
     if message.author == client.user: return
     if channels.get(message.guild.name) != message.channel: return
     s = message.content
-    if s[:4] == '>ep ':
-        arg = s[4:]
-        try: arg = int(arg)
+    msg = message.channel.send
+    if s[:4] == '>ep ': await disp_level(s[4:],msg)
+    elif s[:7] == '>stats ': await disp_stats(s[7:],msg)
+    elif s[:5] == '>roll':
+        if not s[5:]: s += ' 1'
+        await wrap_pull(pull_any,s[6:]+s[5:],msg)
+    elif s[:5] == '>new ': await wrap_pull(pull_new,s[5:],msg)
+    elif s[:9] == '>improve ': await wrap_pull(pull_improve,s[9:],msg)
+    elif s[:7] == '>snipe ': await wrap_pull(pull_snipe,s[7:],msg)
+
+async def disp_level(arg,msg):
+    try: arg = int(arg)
+    except ValueError:
+        await msg('Invalid argument (enter a level ID)')
+        return
+    print('received request for level',arg)
+    e = write_level_info(arg)
+    if not e:
+        await msg(f'Level {arg} not found')
+        return
+    name = create_image(f'{url}/static/lvls/{arg}.svg')
+    kw = {'embed':e}
+    if name:
+        src = f'attachment://{name}'
+        e.set_image(url=src)
+        kw['file'] = discord.File(localpath,filename=name)
+    await msg(**kw)
+
+async def disp_level_terse(arg,msg):
+    try: arg = int(arg)
+    except ValueError:
+        await msg('Invalid argument (enter a level ID)')
+        return
+    print('received request for level',arg)
+    e = write_level_info_terse(arg)
+    if not e:
+        await msg(f'Level {arg} not found')
+        return
+    name = create_image(f'{url}/static/lvls/{arg}.svg')
+    kw = {'embed':e}
+    if name:
+        src = f'attachment://{name}'
+        e.set_thumbnail(url=src)
+        kw['file'] = discord.File(localpath,filename=name)
+    await msg(**kw)
+
+async def disp_stats(arg,msg):
+    print('received request for user',arg)
+    res = user_stats(arg)
+    if not res:
+        await msg(f'User {arg} not found')
+        return
+    await msg(embed=res)
+
+async def wrap_pull(pull,arg,msg):
+    args = arg.split(' ')
+    if len(args) > 1:
+        num = args[-1]
+        try: num = int(num)
         except ValueError:
-            await message.channel.send('Invalid argument (enter a level ID)')
+            await msg(f'Invalid amount: {num}')
             return
-        print('received request for level',arg)
-        e = write_level_info(arg)
-        if not e:
-            await message.channel.send(f'Level {arg} not found')
+        if num > max_requests or num < 1:
+            await msg(f'Invalid amount (must be between 1 and 10)')
             return
-        name = create_image(f'{url}/static/lvls/{arg}.svg')
-        kw = {'embed':e}
-        if name:
-            src = f'attachment://{name}'
-            e.set_image(url=src)
-            kw['file'] = discord.File(localpath,filename=name)
-        await message.channel.send(**kw)
-    elif s[:7] == '>stats ':
-        arg = s[7:]
-        print('received request for user',arg)
-        res = user_stats(arg)
-        if not res:
-            await message.channel.send(f'User {arg} not found')
+        user = ' '.join(args[:-1])
+    else: user,num = arg,1
+    print('pull',user,num)
+    await pull(user,num,msg)
+
+async def pull_any(user,num,msg):
+    if num>1: await msg(f"Rolling {num} random levels...")
+    else: await msg(f"Rolling a random level...")
+    for i in range(num): await disp_level_terse(random.choice(ALL_LEVELS),msg)
+
+async def pull_new(user,num,msg):
+    data = user_data_cache.get(user,[])
+    if not data:
+        data = get_user(user)
+        if not data:
+            await msg(f'User {user} not found')
             return
-        await message.channel.send(embed=res)
+    if num>1: await msg(f"Finding {num} levels {user} hasn't beaten...")
+    else: await msg(f"Finding a level {user} hasn't beaten...")
+    pool = set(ALL_LEVELS)-set(int(i[0]) for i in data if i[4]!='TAS')
+    if not pool:
+        await msg(f'User {user} has beaten all levels!')
+        return
+    for i in range(num): await disp_level_terse(random.choice([*pool]),msg)
+
+async def pull_improve(user,num,msg):
+    data = user_data_cache.get(user,[])
+    if not data:
+        data = get_user(user)
+        if not data:
+            await msg(f'User {user} not found')
+            return
+    if num>1: await msg(f"Finding {num} levels {user} can improve...")
+    else: await msg(f"Finding a level {user} can improve...")
+    d = {}
+    for i in data:
+        if i[4]=='TAS': continue
+        lv = int(i[0])
+        r = int(i[4].partition('/')[0])
+        d[lv] = min(r,d.get(lv,2))
+    pool = [i for i in d if d[i]>1]
+    if not pool:
+        await msg(f'User {user} has all WRs!')
+        return
+    for i in range(num): await disp_level_terse(random.choice(pool),msg)
+
+async def pull_snipe(user,num,msg):
+    data = user_data_cache.get(user,[])
+    if not data:
+        data = get_user(user)
+        if not data:
+            await msg(f'User {user} not found')
+            return
+    if num>1: await msg(f"Finding {num} levels to snipe {user} on...")
+    else: await msg(f"Finding a level to snipe {user} on...")
+    d = {}
+    for i in data:
+        if i[4]=='TAS': continue
+        lv = int(i[0])
+        r = int(i[4].partition('/')[0])
+        d[lv] = min(r,d.get(lv,2))
+    pool = [i for i in d if d[i]<2]
+    if not pool:
+        await msg(f'User {user} has no WRs :(')
+        return
+    for i in range(num): await disp_level_terse(random.choice(pool),msg)
 
 def fix_image(img):
     w,h = img.size
@@ -118,6 +250,12 @@ def create_image(src,fix=True):
     with open(localpath,'wb') as f: f.write(png)
     name = src.split('/')[-1].replace('svg','png')
     return name
+
+def mini_entry(entry):
+    keys = ('summary','title','link')
+    d = {}
+    for i in keys: d[i] = entry[i]
+    return d
 
 def link_name(name):
     return f'[{name}]({url}/author/{name})'
@@ -152,6 +290,9 @@ def get_lv(level):
         res.pop(3)
         res[1],res[3] = skim(res[1]),skim(res[3])
         lb.append(res)
+    tas = sum(i[0]=='TAS' for i in lb)
+    for i in range(tas+1,len(lb)):
+        if lb[i][2] == lb[i-1][2]: lb[i][0] = lb[i-1][0]
     return info,lb
 
 def time_to_cents(time):
@@ -165,7 +306,7 @@ def cents_to_time(n):
 
 def get_user(user):
     data = []
-    r = requests.get(f'{url}/author/{user}/all')
+    r = requests.get(f"{url}/author/{user.replace(' ','%20')}/all")
     if r.status_code!=200:
         print('get_user',r.status_code)
         return
@@ -175,7 +316,15 @@ def get_user(user):
         for j in range(1,len(b)): b[j] = skim(b[j])
         b[1] = time_to_cents(b[1])
         data.append(b)
+    user_data_cache[user] = data
     return data
+
+def get_all_levels():
+    gamers = ('Xakaze','Molgmaran','Nairod','GoblinOfCash')
+    s = set()
+    for i in gamers:
+        for j in get_user(i): s.add(int(j[0]))
+    return sorted(s)
 
 def user_stats(user):
     data = get_user(user)
@@ -265,8 +414,9 @@ def write_time(entry):
         if istas: e.add_field(name='Rank',value=f'-/{n-tas}')
         else:
             for i in range(tas,n):
+                print(lb[i][1:3],[user,runtime])
                 if lb[i][1:3] == [user,runtime]:
-                    e.add_field(name='Rank',value=f'{i-tas+1}/{n-tas}')
+                    e.add_field(name='Rank',value=f'{lb[i][0]}/{n-tas}')
                     break
         if data['Comment'] not in ('','No comment'):
             e.add_field(name='Comment',value=data['Comment'],inline=False)
@@ -305,6 +455,19 @@ def write_level_info(level):
     e.add_field(name='Times',value='\n'.join(link_vid(*i[2:4]) for i in lb[tas:]))
     return e
 
+def write_level_info_terse(level):
+    res = get_lv(level)
+    if not res: return
+    info,lb = res
+    e = discord.Embed(
+        title=f"{info['Name']} (by {info['Author']})",
+        url=f'{url}/{level}',
+        color=TEAL)
+    tas = sum(i[0]=='TAS' for i in lb)
+    e.add_field(name='Users',value='\n'.join(link_name(i[1]) for i in lb[tas:]))
+    e.add_field(name='Times',value='\n'.join(link_vid(*i[2:4]) for i in lb[tas:]))
+    return e
+
 @tasks.loop(minutes=delay)
 async def check_feed():
     print('running loop at',time.ctime())
@@ -316,16 +479,19 @@ async def check_feed():
     # extremely inefficient but the data format is so bad idk another way
     if not feed:
         for entry in r:
-            feed[entry['published']] = json.dumps(entry,sort_keys=True)
+            jmini = json.dumps(mini_entry(entry),sort_keys=True)
+            feed[entry['published']] = jmini
     else:
         new = []
         for entry in r:
+            jmini = json.dumps(mini_entry(entry),sort_keys=True)
             t = entry['published']
-            if t not in feed or feed[t]!=json.dumps(entry,sort_keys=True):
+            if t not in feed or feed[t] != jmini:
                 new.append((time.mktime(entry['published_parsed']),hash(entry),entry))
         for t,_,entry in sorted(new):
+            jmini = json.dumps(mini_entry(entry),sort_keys=True)
             print(entry['title'])
-            feed[entry['published']] = json.dumps(entry,sort_keys=True)
+            feed[entry['published']] = jmini
             kind = entry['title'].partition(':')[0]
             islvl = kind == 'New level'
             if islvl: e,name = write_level(entry)
