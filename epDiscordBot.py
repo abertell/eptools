@@ -1,4 +1,4 @@
-# v1.1.4
+# v1.1.5
 
 import time
 import json
@@ -142,7 +142,7 @@ def get_lv(level):
     name = r.text.partition(' - EPLevels')[0].partition('<title>')[2]
     info = r.text.partition('levelPropsTable')[2].partition('</section>')[0]
     info = info.split('<strong>')[1:]
-    info = [[i.strip() for i in skim(i).split(':')] for i in info]
+    info = [[i.strip() for i in skim(i).partition(':')[::2]] for i in info]
     info = dict(i for i in info if len(i)==2)
     info['Name'] = name.replace('&#39;',"'")
     chunks = r.text.partition('Leaderboard')[2].split('title')[1:-1]
@@ -241,7 +241,7 @@ def write_time(entry):
         got_lv = True
     data = [i.strip().partition('<br />')[0] for i in data.split('\n')]
     data = [i for i in data if i]
-    data = dict(i.split(': ') for i in data)
+    data = dict(i.partition(': ')[::2] for i in data)
     istas = data['Is tas'] == '1'
     kw = {'title':entry['title'],'url':link}
     if got_lv:
@@ -283,7 +283,7 @@ def write_level(entry):
     link = entry['link']
     data = [i.strip().partition('<br />')[0] for i in data.split('\n')]
     data[-2] += ' ' + data[-1]
-    data = dict(i.split(': ') for i in data[:-1])
+    data = dict(i.partition(': ')[::2] for i in data[:-1])
     e = discord.Embed(title=entry['title'],url=link,color=TEAL)
     user = data['By']
     e.add_field(name='Author',value=link_name(user))
