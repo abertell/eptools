@@ -1,13 +1,16 @@
-# v1.2.1
+# v1.2.2
 
 '''
-Current features:
+Current features (can use `>command` or `!command`):
 - `>ep [Level ID]`: Level info + times
-- `>stats [Username]`: Player stats
+- `>stats [Username]`: Player stats (can take a few seconds to load)
 - `>roll (amount)`:  Roll random levels
 - `>new [user] (amount)`: Roll unbeaten levels for user
 - `>improve [user] (amount)`: Roll improvable (not WR) levels for user
 - `>snipe [user] (amount)`:  Roll snipe-able (WR) levels for user
+- `>hunt [user] [time] (amount)`: Roll runs longer than given time for user
+    - Valid time formats are `mm:ss.ms` and `num(s/m/h)` (Ex: 3:30, 25s, 1h)
+    - Defaults to # of minutes if units are not specified
 - New levels/times will also post automatically (checked every 5 minutes)
 
 (all `(amount)` fields are optional and must be between 1 and 10)
@@ -31,6 +34,7 @@ ALL_LEVELS = [] # pre-compute and paste for faster startup
 use_preload_intvs = False
 user_data_cache = {}
 max_requests = 10
+testing = False
 
 delay = 5 # minutes
 
@@ -51,6 +55,7 @@ feed = {}
 async def on_ready():
     global ALL_LEVELS
     print('starting')
+    if testing: print('TESTING MODE ON')
     if ALL_LEVELS:
         if use_preload_intvs:
             gen = zip(ALL_LEVELS[::2],ALL_LEVELS[1::2])
@@ -102,14 +107,18 @@ async def on_message(message):
     if channels.get(message.guild.name) != message.channel: return
     s = message.content
     msg = message.channel.send
-    if s[:4] == '>ep ': await disp_level(s[4:],msg)
-    elif s[:7] == '>stats ': await disp_stats(s[7:],msg)
-    elif s[:5] == '>roll':
-        if not s[5:]: s += ' 1'
-        await wrap_pull(pull_any,s[6:]+s[5:],msg)
-    elif s[:5] == '>new ': await wrap_pull(pull_new,s[5:],msg)
-    elif s[:9] == '>improve ': await wrap_pull(pull_improve,s[9:],msg)
-    elif s[:7] == '>snipe ': await wrap_pull(pull_snipe,s[7:],msg)
+    if s and s[0] in '>!':
+        if testing and message.guild.name[:4] != 'test':
+            await msg('Bot is down for testing :(')
+        if s[1:4] == 'ep ': await disp_level(s[4:],msg)
+        elif s[1:7] == 'stats ': await disp_stats(s[7:],msg)
+        elif s[1:5] == 'roll':
+            if not s[5:]: s += ' 1'
+            await wrap_pull(pull_any,s[6:],0,msg)
+        elif s[1:5] == 'new ': await wrap_pull(pull_new,s[5:],1,msg)
+        elif s[1:9] == 'improve ': await wrap_pull(pull_improve,s[9:],1,msg)
+        elif s[1:7] == 'snipe ': await wrap_pull(pull_snipe,s[7:],1,msg)
+        elif s[1:6] == 'hunt ': await wrap_pull(pull_hunt,s[6:],2,msg)
 
 async def disp_level(arg,msg):
     try: arg = int(arg)
@@ -155,23 +164,24 @@ async def disp_stats(arg,msg):
         return
     await msg(embed=res)
 
-async def wrap_pull(pull,arg,msg):
+async def wrap_pull(pull,arg,num_args,msg):
     args = arg.split(' ')
-    if len(args) > 1:
-        num = args[-1]
-        try: num = int(num)
-        except ValueError:
-            await msg(f'Invalid amount: {num}')
-            return
-        if num > max_requests or num < 1:
-            await msg(f'Invalid amount (must be between 1 and 10)')
-            return
-        user = ' '.join(args[:-1])
-    else: user,num = arg,1
-    print('pull',user,num)
-    await pull(user,num,msg)
+    if len(args)<num_args:
+        await msg('Not enough arguments given '
+            +'(check the pinned message for help with commands)')
+        return
+    if len(args)==num_args: args.append(1)
+    try: args[-1] = int(args[-1])
+    except ValueError: args.append(1)
+    if args[-1] > max_requests or args[-1] < 1:
+        await msg(f'Invalid amount (must be between 1 and 10)')
+        return
+    if num_args: args = [' '.join(args[:-num_args])]+args[-num_args:]
+    else: args = args[-1:]
+    print('pull',args)
+    await pull(*args,msg)
 
-async def pull_any(user,num,msg):
+async def pull_any(num,msg):
     if num>1: await msg(f"Rolling {num} random levels...")
     else: await msg(f"Rolling a random level...")
     for i in range(num): await disp_level_terse(random.choice(ALL_LEVELS),msg)
@@ -233,6 +243,51 @@ async def pull_snipe(user,num,msg):
         return
     for i in range(num): await disp_level_terse(random.choice(pool),msg)
 
+def parse_time(s):
+    cents = {'s':100,'m':6000,'h':360000}
+    bad = [*map(float,('nan','inf','-inf'))]
+    if ':' in s:
+        mn,_,sc = s.partition(':')
+        try: mn,sc = int(mn),float(sc)
+        except ValueError: return -1
+        if sc in bad or sc<0 or mn<0: return -1
+        return 6000*mn+100*sc
+    val = s[:-1]
+    try: val = float(val)
+    except ValueError: return -1
+    if val in bad or val<0: return -1
+    return val*cents[s[-1]]
+
+async def pull_hunt(user,time,num,msg):
+    data = user_data_cache.get(user,[])
+    if not data:
+        data = get_user(user)
+        if not data:
+            await msg(f'User {user} not found')
+            return
+    if ':' in time:
+        mn,_,sc = time.partition(':')
+        sc,_,cs = sc.partition('.')
+        time = f'{mn}:{sc.zfill(2)}.{cs}'
+    elif time[-1] not in 'smh': time+='m'
+    val = parse_time(time)
+    if val==-1:
+        await msg(f'Invalid length: {time}')
+        return
+    if num>1: await msg(f"Finding {num} {user} runs longer than {time}...")
+    else: await msg(f"Finding a {user} run longer than {time}...")
+    d = {}
+    for i in data:
+        if i[4]=='TAS': continue
+        lv = int(i[0])
+        t = i[1]
+        d[lv] = min(t,d.get(lv,1e9))
+    pool = [i for i in d if d[i]>val]
+    if not pool:
+        await msg(f'User {user} has no runs longer than {time}.')
+        return
+    for i in range(num): await disp_level_terse(random.choice(pool),msg)
+
 def fix_image(img):
     w,h = img.size
     if w>3*h: img.crop((w-3*h)//2,0,(w+3*h)//2,h)
@@ -240,11 +295,11 @@ def fix_image(img):
     return img
 
 def create_image(src,fix=True):
+    r = requests.get(src)
+    if r.status_code!=200:
+        print('create_image failed',r.status_code)
+        return
     try: 
-        r = requests.get(src)
-        if r.status_code!=200:
-            print('create_image failed',r.status_code)
-            return
         img = Image(blob=r.content)
         if fix: img = fix_image(img)
         png = img.make_blob("png")
@@ -490,7 +545,7 @@ async def check_feed():
             jmini = json.dumps(mini_entry(entry),sort_keys=True)
             t = entry['published']
             if t not in feed or feed[t] != jmini:
-                print('old:',feed[t])
+                print('old:',feed.get(t))
                 print('new:',jmini)
                 new.append((time.mktime(entry['published_parsed']),hash(entry),entry))
         for t,_,entry in sorted(new):
@@ -508,6 +563,7 @@ async def check_feed():
             if islvl: e.set_image(url=src)
             else: e.set_thumbnail(url=src)
             for i in channels:
+                if testing and i[:4]!='test': continue
                 file = discord.File(localpath,filename=name)
                 await channels[i].send(file=file,embed=e)
     last_request = json.dumps(r[0],sort_keys=True)
