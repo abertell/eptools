@@ -9,8 +9,8 @@ Current features (can use `>command` or `!command`):
 - `>improve [user] (amount)`: Roll improvable (not WR) levels for user
 - `>snipe [user] (amount)`:  Roll snipe-able (WR) levels for user
 - `>hunt [user] [time] (amount)`: Roll runs longer than given time for user
-    - Valid time formats are `mm:ss.ms` and `num(s/m/h)` (Ex: 3:30, 25s, 1h)
-    - Defaults to # of minutes if units are not specified
+  - Valid time formats are `mm:ss.ms` and `num(s/m/h)` (Ex: 3:30, 25s, 1h)
+  - Defaults to # of minutes if units are not specified
 - New levels/times will also post automatically (checked every 5 minutes)
 
 (all `(amount)` fields are optional and must be between 1 and 10)
@@ -566,7 +566,6 @@ async def check_feed():
                 if testing and i[:4]!='test': continue
                 file = discord.File(localpath,filename=name)
                 await channels[i].send(file=file,embed=e)
-    last_request = json.dumps(r[0],sort_keys=True)
     print('up to date')
 
 client.run(TOKEN)
