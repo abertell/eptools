@@ -1,4 +1,4 @@
-# v1.2.2
+# v1.2.3
 
 '''
 Current features (can use `>command` or `!command`):
@@ -50,6 +50,7 @@ client = discord.Client(intents=intents)
 
 channels = {}
 feed = {}
+last_upd = 0
 
 @client.event
 async def on_ready():
@@ -310,10 +311,14 @@ def create_image(src,fix=True):
         print('image conversion failed')
         return
 
+def strip(s):
+    for i in ('\n               ','<br />','\n'): s = s.replace(i,'')
+    return s
+
 def mini_entry(entry):
     keys = ('summary','title','link')
     d = {}
-    for i in keys: d[i] = entry[i]
+    for i in keys: d[i] = strip(entry[i])
     return d
 
 def link_name(name):
@@ -528,6 +533,10 @@ def write_level_info_terse(level):
 
 @tasks.loop(minutes=delay)
 async def check_feed():
+    global last_upd
+    t = time.monotonic()
+    if t-last_upd < delay*60-30: return
+    last_upd = t
     print('running loop at',time.ctime())
     r = parse(f'{url}/rss.xml')
     if 'entries' not in r:
