@@ -1,4 +1,4 @@
-# v1.2.3
+# v1.2.4
 
 '''
 Current features (can use `>command` or `!command`):
@@ -22,7 +22,7 @@ import random
 import requests
 from feedparser import parse
 from wand.image import Image
-from wand.exceptions import CacheError
+from wand.exceptions import CacheError,ImageError,ResourceLimitError
 
 import discord
 from discord.ext import tasks
@@ -32,6 +32,7 @@ localpath = '<path for saving level previews>'
 
 ALL_LEVELS = [] # pre-compute and paste for faster startup
 use_preload_intvs = False
+generated_ids = False
 user_data_cache = {}
 max_requests = 10
 testing = False
@@ -54,13 +55,14 @@ last_upd = 0
 
 @client.event
 async def on_ready():
-    global ALL_LEVELS
+    global ALL_LEVELS,generated_ids
     print('starting')
     if testing: print('TESTING MODE ON')
     if ALL_LEVELS:
-        if use_preload_intvs:
+        if use_preload_intvs and not generated_ids:
             gen = zip(ALL_LEVELS[::2],ALL_LEVELS[1::2])
             ALL_LEVELS = sum(([*range(a,b+1)] for a,b in gen),[])
+            generated_ids = True
     else: ALL_LEVELS = get_all_levels()
     print('all',len(ALL_LEVELS),'level ids found')
     for guild in client.guilds:
@@ -111,6 +113,7 @@ async def on_message(message):
     if s and s[0] in '>!':
         if testing and message.guild.name[:4] != 'test':
             await msg('Bot is down for testing :(')
+            return
         if s[1:4] == 'ep ': await disp_level(s[4:],msg)
         elif s[1:7] == 'stats ': await disp_stats(s[7:],msg)
         elif s[1:5] == 'roll':
@@ -300,14 +303,14 @@ def create_image(src,fix=True):
     if r.status_code!=200:
         print('create_image failed',r.status_code)
         return
-    try: 
+    try:
         img = Image(blob=r.content)
         if fix: img = fix_image(img)
         png = img.make_blob("png")
         with open(localpath,'wb') as f: f.write(png)
         name = src.split('/')[-1].replace('svg','png')
         return name
-    except CacheError:
+    except (CacheError,ImageError,ResourceLimitError):
         print('image conversion failed')
         return
 
@@ -320,6 +323,17 @@ def mini_entry(entry):
     d = {}
     for i in keys: d[i] = strip(entry[i])
     return d
+
+def entry_hash(entry):
+    s = entry['published']
+    me = mini_entry(entry)
+    s += me['link']
+    s += me['title']
+    info = me['summary']
+    for i in ('Comment','Video','Is tas'): info = info.partition(f'{i}: ')[0]
+    fix,_,new = info.partition('Chrono: ')
+    s += fix
+    return s,new
 
 def link_name(name):
     return f'[{name}]({url}/author/{name})'
@@ -339,7 +353,7 @@ def skim(s):
 def get_lv(level):
     r = requests.get(f'{url}/{level}')
     if r.status_code!=200:
-        print('get_lb',r.status_code)
+        print('get_lv',r.status_code)
         return
     name = r.text.partition(' - EPLevels')[0].partition('<title>')[2]
     info = r.text.partition('levelPropsTable')[2].partition('</section>')[0]
@@ -535,7 +549,7 @@ def write_level_info_terse(level):
 async def check_feed():
     global last_upd
     t = time.monotonic()
-    if t-last_upd < delay*60-30: return
+    if last_upd and t-last_upd < delay*60-30: return
     last_upd = t
     print('running loop at',time.ctime())
     r = parse(f'{url}/rss.xml')
@@ -546,21 +560,19 @@ async def check_feed():
     # extremely inefficient but the data format is so bad idk another way
     if not feed:
         for entry in r:
-            jmini = json.dumps(mini_entry(entry),sort_keys=True)
-            feed[entry['published']] = jmini
+            fix,unfix = entry_hash(entry)
+            feed[fix] = unfix
     else:
         new = []
         for entry in r:
-            jmini = json.dumps(mini_entry(entry),sort_keys=True)
-            t = entry['published']
-            if t not in feed or feed[t] != jmini:
-                print('old:',feed.get(t))
-                print('new:',jmini)
+            fix,unfix = entry_hash(entry)
+            if fix not in feed or feed[fix] != unfix:
+                print('old:',fix,'|',feed.get(fix))
+                print('new:',fix,'|',unfix)
                 new.append((time.mktime(entry['published_parsed']),hash(entry),entry))
         for t,_,entry in sorted(new):
-            jmini = json.dumps(mini_entry(entry),sort_keys=True)
-            print(entry['title'])
-            feed[entry['published']] = jmini
+            fix,unfix = entry_hash(entry)
+            feed[fix] = unfix
             kind = entry['title'].partition(':')[0]
             islvl = kind == 'New level'
             if islvl: e,name = write_level(entry)
@@ -577,4 +589,4 @@ async def check_feed():
                 await channels[i].send(file=file,embed=e)
     print('up to date')
 
-client.run(TOKEN)
+if __name__ == '__main__': client.run(TOKEN)
