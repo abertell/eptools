@@ -1,4 +1,4 @@
-# v1.2.4
+# v1.2.5
 
 '''
 Current features (can use `>command` or `!command`):
@@ -168,6 +168,15 @@ async def disp_stats(arg,msg):
         return
     await msg(embed=res)
 
+def pick_random(pool,num):
+    p = [*pool]
+    res = []
+    while p:
+        i = random.choice(p)
+        p.remove(i)
+        res.append(i)
+    return res
+
 async def wrap_pull(pull,arg,num_args,msg):
     args = arg.split(' ')
     if len(args)<num_args:
@@ -188,7 +197,9 @@ async def wrap_pull(pull,arg,num_args,msg):
 async def pull_any(num,msg):
     if num>1: await msg(f"Rolling {num} random levels...")
     else: await msg(f"Rolling a random level...")
-    for i in range(num): await disp_level_terse(random.choice(ALL_LEVELS),msg)
+    pick = pick_random(ALL_LEVELS,num)
+    for i in pick: await disp_level_terse(i,msg)
+    if len(pick)<num: await msg('No more levels found')
 
 async def pull_new(user,num,msg):
     data = user_data_cache.get(user,[])
@@ -203,7 +214,9 @@ async def pull_new(user,num,msg):
     if not pool:
         await msg(f'User {user} has beaten all levels!')
         return
-    for i in range(num): await disp_level_terse(random.choice([*pool]),msg)
+    pick = pick_random(pool,num)
+    for i in pick: await disp_level_terse(i,msg)
+    if len(pick)<num: await msg('No more levels found')
 
 async def pull_improve(user,num,msg):
     data = user_data_cache.get(user,[])
@@ -224,7 +237,9 @@ async def pull_improve(user,num,msg):
     if not pool:
         await msg(f'User {user} has all WRs!')
         return
-    for i in range(num): await disp_level_terse(random.choice(pool),msg)
+    pick = pick_random(pool,num)
+    for i in pick: await disp_level_terse(i,msg)
+    if len(pick)<num: await msg('No more levels found')
 
 async def pull_snipe(user,num,msg):
     data = user_data_cache.get(user,[])
@@ -245,7 +260,9 @@ async def pull_snipe(user,num,msg):
     if not pool:
         await msg(f'User {user} has no WRs :(')
         return
-    for i in range(num): await disp_level_terse(random.choice(pool),msg)
+    pick = pick_random(pool,num)
+    for i in pick: await disp_level_terse(i,msg)
+    if len(pick)<num: await msg('No more levels found')
 
 def parse_time(s):
     cents = {'s':100,'m':6000,'h':360000}
@@ -290,7 +307,9 @@ async def pull_hunt(user,time,num,msg):
     if not pool:
         await msg(f'User {user} has no runs longer than {time}.')
         return
-    for i in range(num): await disp_level_terse(random.choice(pool),msg)
+    pick = pick_random(pool,num)
+    for i in pick: await disp_level_terse(i,msg)
+    if len(pick)<num: await msg('No more levels found')
 
 def fix_image(img):
     w,h = img.size
@@ -402,7 +421,14 @@ def get_all_levels():
     s = set()
     for i in gamers:
         for j in get_user(i): s.add(int(j[0]))
-    return sorted(s)
+    s = sorted(s)
+    a = []
+    for i in range(len(s)):
+        if i<1 or s[i]-s[i-1]>1: a.append(s[i])
+        if i==len(s)-1 or s[i+1]-s[i]>1: a.append(s[i])
+    print(len(a))
+    print(str(a).replace(' ',''))
+    return s
 
 def user_stats(user):
     data = get_user(user)
@@ -567,8 +593,7 @@ async def check_feed():
         for entry in r:
             fix,unfix = entry_hash(entry)
             if fix not in feed or feed[fix] != unfix:
-                print('old:',fix,'|',feed.get(fix))
-                print('new:',fix,'|',unfix)
+                print(fix,'|',unfix,'|',feed.get(fix))
                 new.append((time.mktime(entry['published_parsed']),hash(entry),entry))
         for t,_,entry in sorted(new):
             fix,unfix = entry_hash(entry)
